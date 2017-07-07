@@ -86,7 +86,6 @@ def main(content_path, style_path, output_dir, iterations, vgg_path, preserve_co
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
         for i in range(1, iterations+1):
-            print 'iteration:', i
             sess.run(optimize)
             fmt_str = 'Iteration {:4}/{:4}    content loss {:14}  style loss {:14}'
             print fmt_str.format(i, iterations, ALPHA*content_loss.eval(), BETA*style_loss.eval())
@@ -114,4 +113,4 @@ if __name__ == "__main__":
     #     os.makedirs(args.output)
     # print('Saving output images to {}'.format(args.output))
 
-    main('./content/content.jpg', './style/style.jpg', './output', 10, './vgg19.npy', True)
+    main('./content/content.jpg', './style/style.jpg', './output', 9999, './vgg19.npy', True)
