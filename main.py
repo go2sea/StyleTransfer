@@ -93,7 +93,6 @@ def main(content_path, style_path, output_dir, iterations, vgg_path, preserve_co
             save_image(image.eval(), output_path, content_yuv if preserve_color else None)
 
 
-
 if __name__ == "__main__":
     # parser = argparse.ArgumentParser()
     # parser.add_argument('--content', dest='content', default='examples/content.jpg', help='path to content image')
