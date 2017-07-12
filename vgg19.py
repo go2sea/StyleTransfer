@@ -1,14 +1,3 @@
-"""VGG-19 pretrained feature extractors
-
-Code adapted from:
-
-    https://github.com/machrisaa/tensorflow-vgg/blob/master/vgg19.py
-
-Instructions to download pretrained .npy model can be found at:
-
-    https://github.com/machrisaa/tensorflow-vgg
-
-"""
 import os
 import tensorflow as tf
 
