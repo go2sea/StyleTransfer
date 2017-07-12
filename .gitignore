@@ -2,3 +2,8 @@
 *pyc
 *npy
 .idea/
+*checkpoint
+*.data*
+*.meta
+*.index
+*.DS_Store

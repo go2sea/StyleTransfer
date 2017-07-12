@@ -10,11 +10,15 @@ class Config:
     LR = 0.1
     ITERATIONS = 9999
 
-    content_path = './content/'
+    model_path = './model/baby_model'
+
+    content_train_path = './content_train/'
+    content_transfer_path = './content_transfer/content.jpg'
     STYLE_PATH = './style/style.jpg'
     VGG_PATH = './vgg19.npy'
-    OUTPUT_DIR = './output2'
-    PRESERVE_COLOR = True
+    fast_style_transfer_output = './fast_style_transfer_output'
+
+    preserve_color = True
 
     batch_size = 1
 
