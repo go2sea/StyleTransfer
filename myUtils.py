@@ -28,9 +28,10 @@ def resize_conv(inputs, kernel_shape, bias_shape, strides, w_i, b_i=None, activa
                                      method=tf.image.ResizeMethod.NEAREST_NEIGHBOR)
     return conv(resized, kernel_shape, bias_shape, strides, w_i, b_i, activation)
 
-
+# 替代batch norm，更好的消除对比度
 def instance_norm(inputs):
     epsilon = 1e-9  # 避免0除数
+    # 在 [1, 2]维度（一个feature map）中求其均值&方差
     mean, var = tf.nn.moments(inputs, [1, 2], keep_dims=True)
     return tf.div(inputs - mean, tf.sqrt(tf.add(var, epsilon)))
 
