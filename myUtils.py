@@ -18,7 +18,7 @@ def lazy_property(func):
 
 
 # 若bias_shape 为 None，表示不使用bias
-def resize_conv(inputs, kernel_shape, bias_shape, strides, w_i, b_i=None, activation=tf.nn.relu, training=True):
+def resize_conv(inputs, kernel_shape, bias_shape, strides, w_i, b_i=None, activation=tf.nn.relu):
     height = tf.shape(inputs)[1]
     width = tf.shape(inputs)[2]
     target_height = height * strides[1] * 2

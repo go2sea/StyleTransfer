@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-import argparse
 import cv2
 import numpy as np
 import os
@@ -7,7 +6,7 @@ import skimage.io
 import tensorflow as tf
 import vgg19
 import glob
-from Config import Config
+from Config import FastStyleTransferConfig
 from myUtils import lazy_property, conv, residual, instance_norm, resize_conv
 
 
@@ -16,30 +15,29 @@ class FastStyleTransfer:
         self.sess = tf.Session()
         self.config = config
         # 由于风格固定，__init__可以加载风格图
-        self.style_img_bgr, _ = self.load_image(self.config.STYLE_PATH)
+        self.style_img_bgr, _ = self.load_image(self.config.style_path)
         # content_vggs，注意shape中添加batch_size
         self.content_input = tf.placeholder(tf.float32, self.config.batch_shape)
         self.content_vggs = []
         for i in range(self.config.batch_size):
-            self.content_vggs.append(vgg19.Vgg19(self.config.VGG_PATH))
+            self.content_vggs.append(vgg19.Vgg19(self.config.vgg_path))
             self.content_vggs[i].build(self.content_input[i])
         # style_vgg
         self.style_input = tf.placeholder(tf.float32, self.style_img_bgr.shape)  # 注意：style的shape不遵循config
-        self.style_vgg = vgg19.Vgg19(self.config.VGG_PATH)
+        self.style_vgg = vgg19.Vgg19(self.config.vgg_path)
         self.style_vgg.build(self.style_input)
         # noise_vgg
         self.noise_input = tf.placeholder(tf.float32, [1, None, None, self.config.num_channels])
         self.noise = self.sess.run(tf.truncated_normal(self.config.noise_shape, stddev=0.001))
-        self.trans_net_output_vgg = vgg19.Vgg19(self.config.VGG_PATH)
+        self.trans_net_output_vgg = vgg19.Vgg19(self.config.vgg_path)
         self.trans_net_output_vgg.build(self.trans_net_output)
 
         self.sess.run(tf.global_variables_initializer())
 
-        # 内容表示 & 风格表示
+        # 内容表示 & 风格表示：内容图的内容表示，风格图的风格表示，noise的both
         self.content_reps = []
         for i in range(self.config.batch_size):
             self.content_reps.append(getattr(self.content_vggs[i], self.config.content_layer))
-        # self.content_rep = getattr(self.content_vgg, self.config.CONTENT_LAYER)
         self.style_rep = self.sess.run(self.get_style_rep(self.style_vgg),
                                        feed_dict={self.style_input: self.style_img_bgr})   # 注意：风格图的风格表示只需被计算一次
         self.noise_content_rep = getattr(self.trans_net_output_vgg, self.config.content_layer)
@@ -52,7 +50,7 @@ class FastStyleTransfer:
         self.sess.run(tf.global_variables_initializer())
         self.saver = tf.train.Saver()
 
-    def build_layers(self, input_imgs, w_i, b_i, training=True):
+    def build_layers(self, input_imgs, w_i, b_i):
         with tf.variable_scope('conv1'):
             relu1 = tf.nn.relu(instance_norm(conv(input_imgs, [9, 9, 3, 32], None, [1, 1, 1, 1], w_i, b_i)))
         with tf.variable_scope('conv2'):
@@ -68,9 +66,9 @@ class FastStyleTransfer:
         with tf.variable_scope('residual4'):
             residual4 = residual(residual3, [3, 3, 128, 128], None, [1, 1, 1, 1], w_i, b_i)
         with tf.variable_scope('deconv1'):
-            deconv1 = tf.nn.relu(instance_norm(resize_conv(residual4, [3, 3, 128, 64], None, [1, 2, 2, 1], w_i, b_i, None, training)))
+            deconv1 = tf.nn.relu(instance_norm(resize_conv(residual4, [3, 3, 128, 64], None, [1, 2, 2, 1], w_i, b_i, None)))
         with tf.variable_scope('deconv2'):
-            deconv2 = tf.nn.relu(instance_norm(resize_conv(deconv1, [3, 3, 64, 32], None, [1, 2, 2, 1], w_i, b_i, None, training)))
+            deconv2 = tf.nn.relu(instance_norm(resize_conv(deconv1, [3, 3, 64, 32], None, [1, 2, 2, 1], w_i, b_i, None)))
         with tf.variable_scope('deconv3'):
             deconv3 = tf.nn.relu(instance_norm(conv(deconv2, [9, 9, 32, 3], None, [1, 1, 1, 1], w_i, b_i, None)))
         return deconv3
@@ -86,7 +84,7 @@ class FastStyleTransfer:
         self.restore_sess()
         noise_bgr, noise_yuv = self.load_image(self.config.content_transfer_path)
 
-        output_path = os.path.join(self.config.fast_style_transfer_output, 'transfered.jpg')
+        output_path = os.path.join(self.config.output, 'transfered.jpg')
         noise_img_bgr = self.sess.run(tf.image.resize_images(noise_bgr,
                                                              size=[self.config.img_height, self.config.img_width],
                                                              method=tf.image.ResizeMethod.NEAREST_NEIGHBOR))
@@ -106,32 +104,23 @@ class FastStyleTransfer:
         content_img_paths = sorted(glob.glob("{}/*".format(self.config.content_train_path)))
         index_list = np.random.randint(0, len(content_img_paths), size=self.config.batch_size)
 
-        batch = []
-        for i in range(self.config.batch_size):
-            content_img_path = content_img_paths[index_list[i]]
-            content_img_bgr, content_img_yuv = self.load_image(content_img_path)
-            # reshape至config.shape，注意resize_images的input需为4-D or 3-D的tensor
-            resized = self.sess.run(tf.image.resize_images(content_img_bgr,
-                                                           size=[self.config.img_height, self.config.img_width],
-                                                           method=tf.image.ResizeMethod.NEAREST_NEIGHBOR))
-            batch.append(resized)
-
-        for i in range(0, self.config.ITERATIONS):
-            fmt_str = 'Iteration {:4}/{:4}    content loss {:14}  style loss {:14}'
-            # print fmt_str.format(i, self.config.ITERATIONS,
-            #                      self.config.ALPHA*self.sess.run(self.content_loss, feed_dict={
-            #                          self.content_input: batch
-            #                      }),
-            #                      self.config.BETA*self.sess.run(self.style_loss, feed_dict={
-            #                          self.content_input: batch
-            #                      }))
+        for iteration in range(0, self.config.ITERATIONS):
+            batch = []
+            for i in range(self.config.batch_size):
+                content_img_path = content_img_paths[index_list[i]]
+                content_img_bgr, content_img_yuv = self.load_image(content_img_path)
+                # reshape至config.shape，注意resize_images的input需为4-D or 3-D的tensor
+                resized = self.sess.run(tf.image.resize_images(content_img_bgr,
+                                                               size=[self.config.img_height, self.config.img_width],
+                                                               method=tf.image.ResizeMethod.NEAREST_NEIGHBOR))
+                batch.append(resized)
             self.sess.run(self.optimize, feed_dict={
                 self.content_input: batch,
                 self.noise_input: self.noise
             })
 
             fmt_str = 'Iteration {:4}/{:4}    content loss {:14}  style loss {:14}'
-            print fmt_str.format(i, self.config.ITERATIONS,
+            print fmt_str.format(iteration, self.config.ITERATIONS,
                                  self.config.ALPHA*self.sess.run(self.content_loss, feed_dict={
                                      self.content_input: batch,
                                      self.noise_input: self.noise
@@ -140,8 +129,6 @@ class FastStyleTransfer:
                                      self.content_input: batch,
                                      self.noise_input: self.noise
                                  }))
-            # output_path = os.path.join(self.config.OUTPUT_DIR, 'output_{:04}.jpg'.format(i))
-            # self.save_image(self.sess.run(self.noise), output_path, content_img_yuv if self.config.PRESERVE_COLOR else None)
 
     @lazy_property
     def content_loss(self):
@@ -206,8 +193,8 @@ class FastStyleTransfer:
         print 'Sess restored from ', self.config.model_path, ' !!!'
 
 if __name__ == "__main__":
-    transfer = FastStyleTransfer(Config())
-    # transfer.train_transfer_net()
-    transfer.transfer()
+    transfer = FastStyleTransfer(FastStyleTransferConfig())
+    transfer.train_transfer_net()
+    # transfer.transfer()
 
 

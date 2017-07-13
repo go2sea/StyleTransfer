@@ -1,24 +1,13 @@
 # -*- coding: utf-8 -*-
-import argparse
 import cv2
 import numpy as np
 import os
 import skimage.io
 import tensorflow as tf
-import functools
-from Config import Config
+from Config import StyleTransferConfig
+from myUtils import lazy_property
 
 import vgg19
-
-def lazy_property(func):
-    attribute = '_lazy_' + func.__name__
-    @property
-    @functools.wraps(func)
-    def wrapper(self):
-        if not hasattr(self, attribute):
-            setattr(self, attribute, func(self))
-        return getattr(self, attribute)
-    return wrapper
 
 
 class StyleTransfer:
@@ -27,28 +16,28 @@ class StyleTransfer:
 
         self.config = config
 
-        self.content_img_bgr, self.content_img_yuv = self.load_image(self.config.CONTENT_PATH)
-        self.style_img_bgr, _ = self.load_image(self.config.STYLE_PATH)
+        self.content_img_bgr, self.content_img_yuv = self.load_image(self.config.content_path)
+        self.style_img_bgr, _ = self.load_image(self.config.style_path)
 
         self.content_input = tf.placeholder(tf.float32, self.content_img_bgr.shape)
         self.style_input = tf.placeholder(tf.float32, self.style_img_bgr.shape)
 
-        self.content_vgg = vgg19.Vgg19(self.config.VGG_PATH)
+        self.content_vgg = vgg19.Vgg19(self.config.vgg_path)
         self.content_vgg.build(self.content_input)
-        self.style_vgg = vgg19.Vgg19(self.config.VGG_PATH)
+        self.style_vgg = vgg19.Vgg19(self.config.vgg_path)
         self.style_vgg.build(self.style_input)
 
         self.sess.run(tf.global_variables_initializer())
 
         # 注意：以下两rep只需被计算一次
-        self.content_rep = self.sess.run(getattr(self.content_vgg, self.config.CONTENT_LAYER),
+        self.content_rep = self.sess.run(getattr(self.content_vgg, self.config.content_layer),
                                          feed_dict={self.content_input: self.content_img_bgr})
         self.style_rep = self.sess.run(self.get_style_rep(self.style_vgg),
                                        feed_dict={self.style_input: self.style_img_bgr})
 
         # 从白噪声开始（noise是变量）
         self.noise = tf.Variable(tf.truncated_normal(self.content_img_bgr.shape, stddev=0.1*np.std(self.content_img_bgr)))
-        self.noise_vgg = vgg19.Vgg19(self.config.VGG_PATH)
+        self.noise_vgg = vgg19.Vgg19(self.config.vgg_path)
         self.noise_vgg.build(self.noise)
 
         self.content_loss
@@ -65,12 +54,12 @@ class StyleTransfer:
                                  self.config.ITERATIONS,
                                  self.config.ALPHA*self.sess.run(self.content_loss),
                                  self.config.BETA*self.sess.run(self.style_loss))
-            output_path = os.path.join(self.config.OUTPUT_DIR, 'output_{:04}.jpg'.format(i))
-            self.save_image(self.sess.run(self.noise), output_path, self.content_img_yuv if self.config.PRESERVE_COLOR else None)
+            output_path = os.path.join(self.config.output, 'output_{:04}.jpg'.format(i))
+            self.save_image(self.sess.run(self.noise), output_path, self.content_img_yuv if self.config.preserve_color else None)
 
     @lazy_property
     def content_loss(self):
-        return tf.nn.l2_loss(getattr(self.noise_vgg, self.config.CONTENT_LAYER) - self.content_rep) / self.content_rep.size
+        return tf.nn.l2_loss(getattr(self.noise_vgg, self.config.content_layer) - self.content_rep) / self.content_rep.size
 
     @lazy_property
     def style_loss(self):
@@ -85,7 +74,7 @@ class StyleTransfer:
         return optimizer.minimize(total_loss)
 
     def get_style_rep(self, vgg):
-        return map(self.feature_to_gram, map(lambda l: getattr(vgg, l), self.config.STYLE_LAYERS))
+        return map(self.feature_to_gram, map(lambda l: getattr(vgg, l), self.config.style_layers))
 
     def feature_to_gram(self, f):
         shape = f.get_shape().as_list()
@@ -116,7 +105,7 @@ class StyleTransfer:
 
 
 if __name__ == "__main__":
-    transfer = StyleTransfer(Config())
+    transfer = StyleTransfer(StyleTransferConfig())
     transfer.transfer_train()
 
 
