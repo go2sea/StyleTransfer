@@ -175,7 +175,7 @@ class FastStyleTransfer:
         img = np.squeeze(img)  # 剔除img中长度为1的轴，例：shape:[1,x,y,z]=>shape:[x,y.z]
         img = img[:, :, (2, 1, 0)]  # bgr to rgb
         img = img + vgg19.VGG_MEAN
-        if content_yuv is not None:
+        if content_yuv is not  None:
             yuv = cv2.cvtColor(np.float32(img), cv2.COLOR_RGB2YUV)
             print 'yuv.shape:', yuv.shape
             print 'content_yuv:', content_yuv.shape
