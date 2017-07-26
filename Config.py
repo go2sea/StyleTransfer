@@ -9,9 +9,9 @@ class Config:
 
 class StyleTransferConfig(Config):
     ALPHA = 1.0
-    BETA = 50.0
+    BETA = 0.00005
     LR = 1.0
-    ITERATIONS = 9999
+    ITERATIONS = 999999
     content_path = './content_neural/content.jpg'
     style_path = './style_neural/style.jpg'
     output = './output_neural'
